@@ -1,8 +1,7 @@
 #include <windows.h>
 #include <shellapi.h>
-#include <stdio.h>
 
-// 이전과 동일한 관리자 권한 관련 함수들...
+// 관리자 권한 확인 및 상승 관련 함수들
 BOOL IsRunningAsAdmin() {
     BOOL fIsAdmin = FALSE;
     PSID pAdminGroup = NULL;
@@ -37,16 +36,15 @@ BOOL ElevateProcess() {
 
 HHOOK hHook = NULL;
 
-// 화면 회전 함수 (수정됨)
+// 화면 회전 함수 (팝업 제거됨)
 void RotateScreen(DWORD orientation) {
-    char msg[256];
     DEVMODE devmode;
     memset(&devmode, 0, sizeof(devmode));
     devmode.dmSize = sizeof(devmode);
 
     if (EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &devmode) != 0) {
-        // 너비와 높이를 교환
-        if ((devmode.dmDisplayOrientation + orientation) % 2 != 0) { // 가로 <-> 세로 전환 시
+        // 현재 방향과 목표 방향이 다를 때만 너비/높이 교환
+        if ((devmode.dmDisplayOrientation % 2) != (orientation % 2)) {
             DWORD temp = devmode.dmPelsWidth;
             devmode.dmPelsWidth = devmode.dmPelsHeight;
             devmode.dmPelsHeight = temp;
@@ -55,24 +53,14 @@ void RotateScreen(DWORD orientation) {
         devmode.dmDisplayOrientation = orientation;
         devmode.dmFields = DM_DISPLAYORIENTATION | DM_PELSWIDTH | DM_PELSHEIGHT;
 
-        // CDS_UPDATEREGISTRY 대신 CDS_TEST로 먼저 테스트
-        LONG result = ChangeDisplaySettings(&devmode, CDS_TEST);
-        if (result == DISP_CHANGE_SUCCESSFUL) {
-            // 테스트 성공 시 실제 적용
-            result = ChangeDisplaySettings(&devmode, 0);
-            sprintf(msg, "Rotation successful! Result code: %ld", result);
-            MessageBox(NULL, msg, "Rotation Result", MB_OK);
-        } else {
-            sprintf(msg, "Rotation failed test. Result code: %ld\n(-2 = Bad Mode)", result);
-            MessageBox(NULL, msg, "Rotation Result", MB_OK);
+        // 테스트 후 성공 시에만 실제 적용
+        if (ChangeDisplaySettings(&devmode, CDS_TEST) == DISP_CHANGE_SUCCESSFUL) {
+            ChangeDisplaySettings(&devmode, 0);
         }
-
-    } else {
-        MessageBox(NULL, "Failed to get current display settings.", "Error", MB_ICONERROR);
     }
 }
 
-// 키보드 후크 프로시저 (디버그 메시지 유지)
+// 키보드 후크 프로시저
 LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
         KBDLLHOOKSTRUCT* pkbhs = (KBDLLHOOKSTRUCT*)lParam;
@@ -91,7 +79,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(hHook, nCode, wParam, lParam);
 }
 
-// 메인 함수 (디버그 메시지 제거)
+// 메인 함수
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     if (!IsRunningAsAdmin()) {
         ElevateProcess();
@@ -100,7 +88,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, NULL, 0);
     if (hHook == NULL) {
-        MessageBox(NULL, "Failed to set keyboard hook!", "Fatal Error", MB_ICONERROR | MB_OK);
+        // 치명적 오류 발생 시에만 메시지 표시
+        MessageBox(NULL, "키보드 후크 설치에 실패했습니다!\n다른 키보드 후킹 프로그램과 충돌할 수 있습니다.", "Fatal Error", MB_ICONERROR | MB_OK);
         return 1;
     }
 
