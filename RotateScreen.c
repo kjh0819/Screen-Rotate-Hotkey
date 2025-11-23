@@ -1,38 +1,4 @@
 #include <windows.h>
-#include <shellapi.h>
-
-// 관리자 권한 확인 및 상승 관련 함수들
-BOOL IsRunningAsAdmin() {
-    BOOL fIsAdmin = FALSE;
-    PSID pAdminGroup = NULL;
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-    if (AllocateAndInitializeSid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &pAdminGroup)) {
-        if (!CheckTokenMembership(NULL, pAdminGroup, &fIsAdmin)) {
-            fIsAdmin = FALSE;
-        }
-        FreeSid(pAdminGroup);
-    }
-    return fIsAdmin;
-}
-
-BOOL ElevateProcess() {
-    WCHAR szPath[MAX_PATH];
-    if (GetModuleFileNameW(NULL, szPath, ARRAYSIZE(szPath))) {
-        SHELLEXECUTEINFOW sei = { sizeof(sei) };
-        sei.lpVerb = L"runas";
-        sei.lpFile = szPath;
-        sei.hwnd = NULL;
-        sei.nShow = SW_NORMAL;
-        if (!ShellExecuteExW(&sei)) {
-            DWORD dwError = GetLastError();
-            if (dwError == ERROR_CANCELLED) {
-                return FALSE;
-            }
-        }
-        return TRUE;
-    }
-    return FALSE;
-}
 
 HHOOK hHook = NULL;
 
@@ -81,11 +47,6 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 // 메인 함수
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    if (!IsRunningAsAdmin()) {
-        ElevateProcess();
-        return 0;
-    }
-
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, NULL, 0);
     if (hHook == NULL) {
         // 치명적 오류 발생 시에만 메시지 표시
